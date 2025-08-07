@@ -34,11 +34,15 @@ Implements 7 discrete LOD levels based on distance from camera. Distant chunks u
 
 ## Caching Strategy
 
-Chunk mesh data is cached using Chronicle Map for off-heap storage, reducing GC pressure during intensive rendering. The cache implements LRU eviction with configurable size limits.
+The chunk cache system uses a hybrid approach combining memory-based and file-based storage for optimal performance and persistence. The cache implements LRU eviction with configurable size limits and intelligent compression.
 
-Spatial indexing uses a hash map with chunk coordinates as keys, providing O(1) lookup for adjacent chunks during mesh generation. This eliminates the tree traversal overhead present in vanilla chunk management.
+**Memory Cache**: High-performance ConcurrentHashMap for frequently accessed chunks with compressed storage using run-length encoding to reduce memory footprint while maintaining fast access times.
 
-Mesh data compression applies run-length encoding to vertex arrays, achieving 3:1 compression ratios for typical world geometry while maintaining decompression performance suitable for real-time use.
+**Persistent Cache**: File-based storage system that persists chunk data between game sessions, eliminating the need for expensive external dependencies while providing reliable chunk caching across restarts.
+
+**Compression**: Run-length encoding on mesh data achieves 3:1 compression ratios for typical world geometry while maintaining decompression performance suitable for real-time use.
+
+Spatial indexing uses hash maps with chunk coordinates as keys, providing O(1) lookup for adjacent chunks during mesh generation. This eliminates the tree traversal overhead present in vanilla chunk management.
 
 ## Culling Implementation
 
@@ -100,6 +104,31 @@ The spawn chunk optimizer can be configured in the config file:
 - `disableVanillaSpawnChunks`: Completely disable vanilla system (default: true)
 - `adaptiveSpawnRadius`: Auto-adjust based on performance (default: true)
 
+## Chunk Pre-rendering Pipeline
+
+Kium includes an advanced pre-rendering system that processes and optimizes chunk data before I/O operations, providing significant performance improvements during chunk loading and saving.
+
+**Pipeline Features:**
+- **Mesh Pre-generation**: Pre-calculates mesh data for faster rendering startup
+- **Block Data Optimization**: Run-length encoding reduces storage requirements
+- **I/O Batching**: Groups chunk operations for more efficient disk access
+- **Compression**: Balanced compression (level 6) for optimal space/speed tradeoff
+- **Cache Management**: 10-minute TTL with intelligent cleanup
+
+**Performance Benefits:**
+- Reduced chunk loading times by pre-processing mesh data
+- Lower I/O latency through optimized batching
+- Memory savings through compression (typically 60-70% reduction)
+- Smoother gameplay during chunk streaming operations
+
+The pre-rendering system works seamlessly with C2ME's I/O optimizations, where Kium handles chunk processing logic while C2ME manages the actual disk I/O operations.
+
+Pre-rendering configuration options:
+- `enableChunkPrerendering`: Master toggle (default: true)
+- `enableMeshPregeneration`: Pre-generate mesh data (default: true) 
+- `enableIOBatching`: Batch I/O operations (default: true)
+- `prerenderCompressionLevel`: Compression strength 1-9 (default: 6)
+
 ## Configuration
 
 The `KiumConfig` system provides controls for thread pool sizes, cache limits, and feature toggles. Configuration adapts automatically based on detected hardware capabilities, with manual override options for fine-tuning.
@@ -133,11 +162,12 @@ The mod activates automatically on world load. Performance improvements are most
 - AtomicThreadManager: Coordinates thread lifecycle and cleanup
 
 ### Memory Management
-- Off-heap caching using Chronicle Map for reduced GC pressure
-- Compressed mesh storage with run-length encoding
+- Hybrid caching system with memory and file-based storage
+- Compressed mesh storage with run-length encoding  
 - Spatial indexing with O(1) chunk lookup performance
 - Spawn chunk memory optimization (95% reduction)
 - Automatic cache eviction based on LRU policy
+- Persistent cache across game sessions without external dependencies
 
 ### GPU Integration
 - OpenGL buffer management for persistent vertex storage

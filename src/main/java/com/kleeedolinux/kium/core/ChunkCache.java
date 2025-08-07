@@ -3,11 +3,11 @@ package com.kleeedolinux.kium.core;
 import net.minecraft.util.math.ChunkPos;
 import com.kleeedolinux.kium.KiumMod;
 
-import net.openhft.chronicle.map.ChronicleMap;
 import it.unimi.dsi.fastutil.longs.*;
-import java.io.File;
-import java.io.IOException;
+import java.io.*;
 import java.nio.ByteBuffer;
+import java.nio.file.*;
+import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.*;
 
@@ -15,21 +15,19 @@ public class ChunkCache {
     private static final int MAX_CACHE_SIZE = 8192;
     private static final String CACHE_FILE = "kium_chunk_cache.dat";
     
-    private final ChronicleMap<Long, ChunkData> persistentCache;
+    private final ConcurrentHashMap<Long, ChunkData> persistentCache;
     private final ConcurrentHashMap<Long, CompressedChunkData> memoryCache;
     private final Long2ObjectMap<Long> accessTimes;
     private final AtomicLong cacheHits = new AtomicLong(0);
     private final AtomicLong cacheMisses = new AtomicLong(0);
     private final ScheduledExecutorService cleanupExecutor;
+    private final Path cacheFilePath;
     
     public ChunkCache() throws IOException {
-        this.persistentCache = ChronicleMap
-            .of(Long.class, ChunkData.class)
-            .entries(MAX_CACHE_SIZE * 2)
-            .createPersistedTo(new File(CACHE_FILE));
-            
+        this.persistentCache = new ConcurrentHashMap<>(MAX_CACHE_SIZE * 2);
         this.memoryCache = new ConcurrentHashMap<>(MAX_CACHE_SIZE);
         this.accessTimes = new Long2ObjectOpenHashMap<>();
+        this.cacheFilePath = Paths.get(CACHE_FILE);
         
         this.cleanupExecutor = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread t = new Thread(r, "Kium-ChunkCache-Cleanup");
@@ -37,8 +35,11 @@ public class ChunkCache {
             return t;
         });
         
+        // Load persistent cache from disk if it exists
+        loadPersistentCache();
+        
         cleanupExecutor.scheduleAtFixedRate(this::performCleanup, 30, 30, TimeUnit.SECONDS);
-        KiumMod.LOGGER.info("Chunk cache initialized with memory-mapped storage");
+        KiumMod.LOGGER.info("Chunk cache initialized with file-based storage");
     }
     
     public void cacheChunk(long chunkKey, byte[] meshData, int lodLevel, long timestamp) {
@@ -188,16 +189,39 @@ public class ChunkCache {
         return cacheMisses.get();
     }
     
-    public void shutdown() {
-        cleanupExecutor.shutdown();
-        try {
-            persistentCache.close();
-        } catch (Exception e) {
-            KiumMod.LOGGER.error("Error closing persistent cache", e);
+    private void loadPersistentCache() {
+        if (Files.exists(cacheFilePath)) {
+            try (ObjectInputStream ois = new ObjectInputStream(Files.newInputStream(cacheFilePath))) {
+                @SuppressWarnings("unchecked")
+                ConcurrentHashMap<Long, ChunkData> loaded = (ConcurrentHashMap<Long, ChunkData>) ois.readObject();
+                persistentCache.putAll(loaded);
+                KiumMod.LOGGER.info("Loaded {} cached chunks from disk", loaded.size());
+            } catch (Exception e) {
+                KiumMod.LOGGER.warn("Failed to load persistent cache, starting fresh: {}", e.getMessage());
+            }
         }
     }
     
-    public static class ChunkData {
+    private void savePersistentCache() {
+        try (ObjectOutputStream oos = new ObjectOutputStream(Files.newOutputStream(cacheFilePath))) {
+            oos.writeObject(persistentCache);
+        } catch (Exception e) {
+            KiumMod.LOGGER.error("Failed to save persistent cache: {}", e.getMessage());
+        }
+    }
+    
+    public void shutdown() {
+        cleanupExecutor.shutdown();
+        try {
+            savePersistentCache();
+        } catch (Exception e) {
+            KiumMod.LOGGER.error("Error saving persistent cache", e);
+        }
+    }
+    
+    public static class ChunkData implements Serializable {
+        private static final long serialVersionUID = 1L;
+        
         public final byte[] meshData;
         public final int lodLevel;
         public final long timestamp;

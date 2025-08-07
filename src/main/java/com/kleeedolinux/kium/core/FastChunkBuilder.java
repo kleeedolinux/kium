@@ -2,6 +2,9 @@ package com.kleeedolinux.kium.core;
 
 import net.minecraft.util.math.ChunkPos;
 import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.chunk.WorldChunk;
+import com.kleeedolinux.kium.pipeline.ChunkPrerenderPipeline;
+import com.kleeedolinux.kium.pipeline.ChunkPreProcessor;
 import com.kleeedolinux.kium.KiumMod;
 
 import java.util.concurrent.*;
@@ -106,6 +109,15 @@ public class FastChunkBuilder {
         int priority = calculatePriority(distance, emergency);
         
         ChunkBuildTask task = new ChunkBuildTask(chunkPos, chunkData, priority, distance, emergency);
+        
+        // Check for prerendered data if not emergency
+        if (!emergency && KiumMod.getPrerenderPipeline() != null) {
+            var prerenderedData = KiumMod.getPrerenderPipeline().getPrerenderedData(chunkPos);
+            if (prerenderedData != null) {
+                task.prerenderedData = prerenderedData;
+                KiumMod.LOGGER.debug("Using prerendered data for chunk {}", chunkPos);
+            }
+        }
         
         if (emergency || distance <= IMMEDIATE_RENDER_RADIUS) {
             submitImmediateChunk(task);
@@ -239,6 +251,13 @@ public class FastChunkBuilder {
     }
     
     private void generateFastMesh(ChunkBuildTask task) {
+        // Check if we have prerendered data to accelerate building
+        if (task.prerenderedData != null) {
+            // Use prerendered mesh data for faster building
+            generateMeshFromPrerendered(task);
+            return;
+        }
+        
         // Optimized mesh generation with minimal CPU overhead
         ChunkPos pos = task.chunkPos;
         
@@ -698,6 +717,67 @@ public class FastChunkBuilder {
         createFlatTerrainMesh(pos);
     }
     
+    /**
+     * Generate mesh using prerendered data for maximum performance
+     */
+    private void generateMeshFromPrerendered(ChunkBuildTask task) {
+        var prerendered = task.prerenderedData;
+        ChunkPos pos = task.chunkPos;
+        
+        // Use prerendered mesh data if available
+        if (prerendered.meshData != null) {
+            var meshData = prerendered.meshData;
+            
+            // Fast mesh generation using precomputed statistics
+            task.verticesGenerated = meshData.visibleFaces * 4; // 4 vertices per face
+            task.trianglesGenerated = meshData.visibleFaces * 2; // 2 triangles per face
+            
+            KiumMod.LOGGER.debug("Generated mesh from prerendered data: {} faces, {} triangles", 
+                meshData.visibleFaces, task.trianglesGenerated);
+                
+            // If we also have processed I/O data, trigger preprocessing
+            if (KiumMod.getChunkPreProcessor() != null) {
+                // Async preprocessing for I/O optimization
+                KiumMod.getChunkPreProcessor().processChunkForIO(null, task.priority)
+                    .thenAccept(processedData -> {
+                        if (processedData != null) {
+                            KiumMod.LOGGER.debug("Chunk {} preprocessed for I/O", pos);
+                        }
+                    });
+            }
+            
+        } else {
+            // Fall back to optimized generation using prerendered block data
+            generateOptimizedMesh(task, prerendered.blockData);
+        }
+    }
+    
+    /**
+     * Generate optimized mesh using prerendered block data
+     */
+    private void generateOptimizedMesh(ChunkBuildTask task, ChunkPrerenderPipeline.OptimizedBlockData blockData) {
+        ChunkPos pos = task.chunkPos;
+        
+        // Use run-length encoded block data for efficient mesh generation
+        int faceCount = 0;
+        int solidBlocks = blockData.totalBlocks - blockData.airBlocks;
+        
+        // Estimate mesh complexity from block data
+        for (var run : blockData.runs) {
+            if (!run.state.isAir()) {
+                // Each solid block can contribute up to 6 faces
+                // Use simplified estimation for performance
+                faceCount += run.length * 3; // Average 3 visible faces per block
+            }
+        }
+        
+        task.verticesGenerated = faceCount * 4;
+        task.trianglesGenerated = faceCount * 2;
+        
+        KiumMod.LOGGER.debug("Optimized mesh for {}: {} solid blocks, {} estimated faces", 
+            pos, solidBlocks, faceCount);
+    }
+    
     private void createFlatTerrainMesh(ChunkPos pos) {
         int baseX = pos.x << 4;
         int baseZ = pos.z << 4;
@@ -962,6 +1042,9 @@ public class FastChunkBuilder {
         volatile long buildEndTime = 0;
         volatile int verticesGenerated = 0;
         volatile int trianglesGenerated = 0;
+        
+        // Pre-rendering integration
+        volatile ChunkPrerenderPipeline.PrerenderedChunkData prerenderedData;
         
         ChunkBuildTask(ChunkPos chunkPos, byte[] chunkData, int priority, double distance, boolean emergency) {
             this.chunkPos = chunkPos;

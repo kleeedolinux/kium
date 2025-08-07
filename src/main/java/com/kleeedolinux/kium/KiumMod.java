@@ -10,6 +10,8 @@ import com.kleeedolinux.kium.algorithms.ParallelCullingSystem;
 import com.kleeedolinux.kium.algorithms.VectorizedMeshGenerator;
 import com.kleeedolinux.kium.rendering.GPUOptimizer;
 import com.kleeedolinux.kium.optimization.SpawnChunkOptimizer;
+import com.kleeedolinux.kium.pipeline.ChunkPrerenderPipeline;
+import com.kleeedolinux.kium.pipeline.ChunkPreProcessor;
 import com.kleeedolinux.kium.config.KiumConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,6 +30,8 @@ public class KiumMod implements ModInitializer {
     private static VectorizedMeshGenerator meshGenerator;
     private static GPUOptimizer gpuOptimizer;
     private static SpawnChunkOptimizer spawnChunkOptimizer;
+    private static ChunkPrerenderPipeline prerenderPipeline;
+    private static ChunkPreProcessor chunkPreProcessor;
     
     private static volatile boolean isPaused = false;
     private static long lastCleanupTime = System.currentTimeMillis();
@@ -89,6 +93,12 @@ public class KiumMod implements ModInitializer {
                 LOGGER.info("Spawn chunk optimization enabled");
             }
             
+            if (config.enableChunkPrerendering) {
+                prerenderPipeline = new ChunkPrerenderPipeline();
+                chunkPreProcessor = new ChunkPreProcessor(prerenderPipeline);
+                LOGGER.info("Chunk pre-rendering pipeline enabled");
+            }
+            
             // Initialize batch update system
             batchUpdateManager = new BatchUpdateManager();
             
@@ -109,6 +119,7 @@ public class KiumMod implements ModInitializer {
         if (config.enableVectorizedMeshing && meshGenerator != null) count++;
         if (config.enableGPUOptimization && gpuOptimizer != null) count++;
         if (config.enableSpawnChunkOptimization && spawnChunkOptimizer != null) count++;
+        if (config.enableChunkPrerendering && prerenderPipeline != null && chunkPreProcessor != null) count++;
         return count;
     }
     
@@ -123,6 +134,14 @@ public class KiumMod implements ModInitializer {
             
             if (spawnChunkOptimizer != null) {
                 spawnChunkOptimizer.shutdown();
+            }
+            
+            if (chunkPreProcessor != null) {
+                chunkPreProcessor.shutdown();
+            }
+            
+            if (prerenderPipeline != null) {
+                prerenderPipeline.shutdown();
             }
             
             if (cullingSystem != null) {
@@ -193,6 +212,14 @@ public class KiumMod implements ModInitializer {
         return spawnChunkOptimizer;
     }
     
+    public static ChunkPrerenderPipeline getPrerenderPipeline() {
+        return prerenderPipeline;
+    }
+    
+    public static ChunkPreProcessor getChunkPreProcessor() {
+        return chunkPreProcessor;
+    }
+    
     // Performance and status methods
     public static String getPerformanceStats() {
         StringBuilder stats = new StringBuilder();
@@ -233,6 +260,14 @@ public class KiumMod implements ModInitializer {
             stats.append(spawnChunkOptimizer.getPerformanceStats()).append("\n");
         }
         
+        if (prerenderPipeline != null) {
+            stats.append(prerenderPipeline.getPerformanceStats()).append("\n");
+        }
+        
+        if (chunkPreProcessor != null) {
+            stats.append(chunkPreProcessor.getPerformanceStats()).append("\n");
+        }
+        
         return stats.toString();
     }
     
@@ -248,6 +283,8 @@ public class KiumMod implements ModInitializer {
         if (meshGenerator != null) count++;
         if (gpuOptimizer != null) count++;
         if (spawnChunkOptimizer != null) count++;
+        if (prerenderPipeline != null) count++;
+        if (chunkPreProcessor != null) count++;
         if (batchUpdateManager != null) count++;
         return count;
     }
