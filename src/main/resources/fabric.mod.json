@@ -1,0 +1,31 @@
+{
+    "schemaVersion": 1,
+    "id": "kium",
+    "version": "${version}",
+    "name": "Kium Performance Optimizer",
+    "description": "Advanced computational science-based performance optimization mod using atomic operations and mathematical algorithms for massive chunk rendering",
+    "authors": [
+        "Kleeedolinux"
+    ],
+    "contact": {
+        "homepage": "https://github.com/kleeedolinux/kium",
+        "sources": "https://github.com/kleeedolinux/kium"
+    },
+    "license": "MIT",
+    "icon": "assets/kium/icon.png",
+    "environment": "*",
+    "entrypoints": {
+        "main": [
+            "com.kleeedolinux.kium.KiumMod"
+        ]
+    },
+    "depends": {
+        "fabricloader": ">=${loader_version}",
+        "minecraft": "~${minecraft_version}",
+        "java": ">=17",
+        "fabric-api": "*"
+    },
+    "suggests": {
+        "another-mod": "*"
+    }
+}
