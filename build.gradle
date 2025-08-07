@@ -41,9 +41,7 @@ dependencies {
     
     implementation 'it.unimi.dsi:fastutil:8.5.12'
     implementation 'org.eclipse.collections:eclipse-collections:11.1.0'
-    implementation 'net.openhft:chronicle-map:3.23.5'
-    
-    include 'net.openhft:chronicle-map:3.23.5'
+
 }
 
 processResources {
