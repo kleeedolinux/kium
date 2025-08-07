@@ -19,6 +19,7 @@ public class ChunkOptimizer {
     private final LODSystem lodSystem;
     private final FrustumCuller frustumCuller;
     private final SpatialIndex spatialIndex;
+    private final ChunkCache chunkCache;
     
     private final Long2ObjectMap<ChunkState> chunkStates = new Long2ObjectOpenHashMap<>();
     private final AtomicInteger maxRenderDistance = new AtomicInteger(32);
@@ -36,9 +37,10 @@ public class ChunkOptimizer {
         this.spatialIndex = new SpatialIndex();
         
         try {
+            this.chunkCache = new ChunkCache();
             this.fastChunkBuilder = new FastChunkBuilder();
         } catch (Exception e) {
-            throw new RuntimeException("Failed to initialize FastChunkBuilder", e);
+            throw new RuntimeException("Failed to initialize ChunkOptimizer components", e);
         }
         
         initializeLODLevels();
@@ -244,6 +246,10 @@ public class ChunkOptimizer {
         return fastChunkBuilder;
     }
     
+    public ChunkCache getChunkCache() {
+        return chunkCache;
+    }
+    
     public void pause() {
         paused = true;
         if (fastChunkBuilder != null) {
@@ -285,6 +291,10 @@ public class ChunkOptimizer {
         
         if (fastChunkBuilder != null) {
             fastChunkBuilder.shutdown();
+        }
+        
+        if (chunkCache != null) {
+            chunkCache.shutdown();
         }
     }
     

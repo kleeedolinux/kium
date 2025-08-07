@@ -16,6 +16,7 @@ import java.lang.reflect.Method;
 import java.util.Set;
 import java.util.HashSet;
 import java.nio.ByteBuffer;
+import com.kleeedolinux.kium.optimization.SpawnChunkOptimizer;
 
 /**
  * REAL implementation that completely replaces vanilla chunk rendering pipeline
@@ -38,6 +39,9 @@ public class VanillaIntegration {
     private static volatile boolean kiumEnabled = false;
     private static volatile boolean vanillaPipelineDisabled = false;
     
+    // Spawn chunk optimization
+    private static SpawnChunkOptimizer spawnChunkOptimizer;
+    
     public static void initialize() {
         if (isInitialized.compareAndSet(false, true)) {
             KiumMod.LOGGER.info("REPLACING VANILLA CHUNK PIPELINE WITH KIUM");
@@ -54,6 +58,9 @@ public class VanillaIntegration {
                 
                 // Replace chunk loading logic
                 hijackChunkLoading();
+                
+                // Initialize spawn chunk optimization
+                initializeSpawnChunkOptimization();
                 
                 kiumPipelineActive = true;
                 kiumEnabled = true;
@@ -192,11 +199,31 @@ public class VanillaIntegration {
     }
     
     /**
+     * Initializes spawn chunk optimization system
+     */
+    private static void initializeSpawnChunkOptimization() throws Exception {
+        if (KiumMod.getConfig().enableSpawnChunkOptimization) {
+            spawnChunkOptimizer = new SpawnChunkOptimizer();
+            spawnChunkOptimizer.replaceVanillaSpawnChunks();
+            
+            KiumMod.LOGGER.info("Spawn chunk optimization initialized - vanilla spawn chunks disabled");
+        } else {
+            KiumMod.LOGGER.info("Spawn chunk optimization disabled in config");
+        }
+    }
+    
+    /**
      * BLOCKS vanilla chunk rendering - ALL chunks go through Kium
      */
     public static boolean blockVanillaChunkRender(ChunkPos chunkPos, World world) {
         if (!kiumPipelineActive) {
             return false; // Allow vanilla if Kium failed to initialize
+        }
+        
+        // Check if this is a spawn chunk that should be blocked
+        if (spawnChunkOptimizer != null && spawnChunkOptimizer.shouldBlockVanillaSpawnChunk(chunkPos, world.getRegistryKey().getValue().toString())) {
+            KiumMod.LOGGER.debug("BLOCKING vanilla spawn chunk render: {}", chunkPos);
+            return true; // Block vanilla spawn chunks
         }
         
         // Add to blocked chunks set
@@ -402,5 +429,21 @@ public class VanillaIntegration {
     public static void setKiumEnabled(boolean enabled) {
         kiumEnabled = enabled;
         KiumMod.LOGGER.info("Kium pipeline {}", enabled ? "enabled" : "disabled");
+    }
+    
+    /**
+     * Registers a world spawn for optimization
+     */
+    public static void registerWorldSpawn(String worldId, ChunkPos spawnPos) {
+        if (spawnChunkOptimizer != null) {
+            spawnChunkOptimizer.registerWorldSpawn(worldId, spawnPos);
+        }
+    }
+    
+    /**
+     * Gets the spawn chunk optimizer instance
+     */
+    public static SpawnChunkOptimizer getSpawnChunkOptimizer() {
+        return spawnChunkOptimizer;
     }
 }

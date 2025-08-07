@@ -9,6 +9,7 @@ import com.kleeedolinux.kium.algorithms.PredictiveChunkLoader;
 import com.kleeedolinux.kium.algorithms.ParallelCullingSystem;
 import com.kleeedolinux.kium.algorithms.VectorizedMeshGenerator;
 import com.kleeedolinux.kium.rendering.GPUOptimizer;
+import com.kleeedolinux.kium.optimization.SpawnChunkOptimizer;
 import com.kleeedolinux.kium.config.KiumConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,6 +27,7 @@ public class KiumMod implements ModInitializer {
     private static ParallelCullingSystem cullingSystem;
     private static VectorizedMeshGenerator meshGenerator;
     private static GPUOptimizer gpuOptimizer;
+    private static SpawnChunkOptimizer spawnChunkOptimizer;
     
     private static volatile boolean isPaused = false;
     private static long lastCleanupTime = System.currentTimeMillis();
@@ -82,6 +84,11 @@ public class KiumMod implements ModInitializer {
                 LOGGER.info("GPU optimization enabled");
             }
             
+            if (config.enableSpawnChunkOptimization) {
+                spawnChunkOptimizer = new SpawnChunkOptimizer();
+                LOGGER.info("Spawn chunk optimization enabled");
+            }
+            
             // Initialize batch update system
             batchUpdateManager = new BatchUpdateManager();
             
@@ -101,6 +108,7 @@ public class KiumMod implements ModInitializer {
         if (config.enableParallelCulling && cullingSystem != null) count++;
         if (config.enableVectorizedMeshing && meshGenerator != null) count++;
         if (config.enableGPUOptimization && gpuOptimizer != null) count++;
+        if (config.enableSpawnChunkOptimization && spawnChunkOptimizer != null) count++;
         return count;
     }
     
@@ -111,6 +119,10 @@ public class KiumMod implements ModInitializer {
         try {
             if (gpuOptimizer != null) {
                 gpuOptimizer.shutdown();
+            }
+            
+            if (spawnChunkOptimizer != null) {
+                spawnChunkOptimizer.shutdown();
             }
             
             if (cullingSystem != null) {
@@ -177,6 +189,10 @@ public class KiumMod implements ModInitializer {
         return gpuOptimizer;
     }
     
+    public static SpawnChunkOptimizer getSpawnChunkOptimizer() {
+        return spawnChunkOptimizer;
+    }
+    
     // Performance and status methods
     public static String getPerformanceStats() {
         StringBuilder stats = new StringBuilder();
@@ -213,6 +229,10 @@ public class KiumMod implements ModInitializer {
             stats.append(gpuOptimizer.getPerformanceStats()).append("\n");
         }
         
+        if (spawnChunkOptimizer != null) {
+            stats.append(spawnChunkOptimizer.getPerformanceStats()).append("\n");
+        }
+        
         return stats.toString();
     }
     
@@ -227,6 +247,7 @@ public class KiumMod implements ModInitializer {
         if (cullingSystem != null) count++;
         if (meshGenerator != null) count++;
         if (gpuOptimizer != null) count++;
+        if (spawnChunkOptimizer != null) count++;
         if (batchUpdateManager != null) count++;
         return count;
     }
@@ -303,6 +324,12 @@ public class KiumMod implements ModInitializer {
             // Clean up predictive loader
             if (predictiveLoader != null) {
                 predictiveLoader.cleanupOldData();
+            }
+            
+            // Clean up spawn chunk optimizer
+            if (spawnChunkOptimizer != null) {
+                spawnChunkOptimizer.cleanupSpawnChunks();
+                spawnChunkOptimizer.optimizeSpawnRadius();
             }
             
             // Force minor garbage collection
