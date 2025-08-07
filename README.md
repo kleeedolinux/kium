@@ -2,6 +2,22 @@
 
 A Minecraft Fabric mod targeting the core performance bottlenecks in chunk rendering through parallelization and algorithmic optimizations. Replaces Minecraft's single-threaded chunk processing with a multi-threaded architecture designed to scale with available CPU cores.
 
+## Recommended Mod Combination
+
+**Kium works best when combined with complementary optimization mods:**
+
+- **[Sodium](https://modrinth.com/mod/sodium)** - GPU rendering optimizations and modern OpenGL features
+- **[Lithium](https://modrinth.com/mod/lithium)** - Game logic optimizations (AI pathfinding, physics, redstone)
+- **[C2ME](https://modrinth.com/mod/c2me-fabric)** - Chunk I/O and world generation optimizations
+
+**Why this combination works:**
+- **Kium** optimizes chunk processing, mesh generation, culling, and spawn chunk management
+- **Sodium** handles GPU rendering pipeline and shader optimizations
+- **Lithium** optimizes game logic that Kium doesn't touch (mob AI, block updates, etc.)
+- **C2ME** optimizes chunk I/O operations (disk read/write) and world generation threading
+
+Together, these mods create a complete optimization stack covering all major Minecraft performance bottlenecks without overlap or conflicts. Kium focuses specifically on chunk rendering algorithms while these other mods handle rendering hardware acceleration, game logic, and storage I/O respectively.
+
 ## Architecture Overview
 
 Minecraft's chunk rendering bottleneck occurs primarily in the single-threaded mesh building phase where block data is converted to renderable geometry. The vanilla implementation processes each chunk sequentially, creating a CPU-bound limitation that scales poorly with render distance.
